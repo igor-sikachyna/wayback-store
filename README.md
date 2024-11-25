@@ -26,7 +26,7 @@ On Ethereum you have to pay gas for each modification, but it still may theoreti
 
 - Storage costs 20000 + 2176 Gas per 32 bytes = 693 gas per byte
 - Calldata costs 16 gas per byte
-- Assume the minimum overhead of (int32 (block number) + in16 (hint)) * 2 + int256 (hash) + ~100 (overhead of calling the contract) = 144 bytes per transaction
-- Assume data size of 256 bytes per key
+- Assume the minimum overhead of (int32 (block number) + int16 (hint)) * 2 + int256 (hash) + ~100 (overhead of calling the contract) = 144 bytes per transaction
+- Assume data size of 256 bytes per key (value + key size combined since the key is used for convenience and is not used to balance the tree)
 - Maximum depth of the Merkle tree before storage becomes more cost-efficient: 693 * 256 == (144 * x + 256) * 16 -> x = 75 (maximum 2^74 key-value pairs)
 - For 1024 values (depth 10, x = 11) you will reduce the gas spending by a factor of 6

@@ -16,7 +16,8 @@ type PushTransactionData struct {
 }
 
 type Block struct {
-	Num          int
+	Num int
+	// Simplify the model to have just one "action" per transaction
 	Transactions []Transaction
 }
 
@@ -29,6 +30,10 @@ type Chain struct {
 
 func (c *Chain) GetBlock(blockNumber int) Block {
 	return c.blocks[blockNumber-1]
+}
+
+func (c *Chain) GetBuildingBlockNum() int {
+	return c.headBlockNum + 1
 }
 
 func (c *Chain) ProduceBlock() {
