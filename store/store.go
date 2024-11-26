@@ -1,15 +1,21 @@
 package store
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
 	"wayback-store/chain"
 )
 
+type BlockHint struct {
+	Block int
+	Hint  int
+}
+
 type TableData struct {
-	Hash              string
-	LastBlock         int
-	Hint              int
-	PreviousLastBlock int
-	PreviousHint      int
+	Hash     string
+	Current  BlockHint
+	Previous BlockHint
 }
 
 type KeyValue struct {
@@ -18,10 +24,8 @@ type KeyValue struct {
 }
 
 type TransactionArguments struct {
-	Hash  string
-	Size  int
-	Left  *TableData
-	Right *TableData
+	Left  *BlockHint
+	Right *BlockHint
 	Data  *KeyValue
 }
 
@@ -36,6 +40,8 @@ type Node struct {
 	left   *Node
 	right  *Node
 	data   *KeyValue
+	block  int
+	hint   int
 }
 
 type NodeValuePair struct {
@@ -44,9 +50,10 @@ type NodeValuePair struct {
 }
 
 type Store struct {
-	chain *chain.Chain
-	root  *Node
-	db    map[string]NodeValuePair
+	chain    *chain.Chain
+	root     *Node
+	db       map[string]NodeValuePair
+	nextHint int
 }
 
 func MakeStore(chain *chain.Chain) (result Store) {
@@ -59,8 +66,59 @@ func MakeStore(chain *chain.Chain) (result Store) {
 	return result
 }
 
-func (s *Store) rehashUp(node *Node) []TransactionArguments {
-	return []TransactionArguments{}
+func hash(data string) (result string) {
+	var hasher = sha1.New()
+	hasher.Write([]byte(data))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func (s *Store) getNextHint() int {
+	s.nextHint++
+	return s.nextHint
+}
+
+func (s *Store) rehashUpNext(node *Node, transaction *[]TransactionArguments) {
+	if node == nil {
+		return
+	}
+
+	if node.data != nil {
+		// The "correct" way it to hash the sum of hashes, for simplicity we use a delimiter not allowed in the key
+		node.hash = hash(node.data.Key + "|" + node.data.Value)
+	} else {
+		node.hash = hash(node.left.hash + node.right.hash)
+	}
+
+	// In practice you won't know the block to assign at this stage
+	// You will need to push the transaction and wait for the transaction to appear in a block
+	// The block number where the transaction appeared should be added to the store and no modification is possible until this moment
+	// For simplicity we will pretend like we already know the block number
+	node.block = s.chain.GetBuildingBlockNum()
+	node.hint = s.getNextHint()
+
+	if node.data != nil {
+		*transaction = append(*transaction, TransactionArguments{
+			Data: node.data,
+		})
+	} else {
+		*transaction = append(*transaction, TransactionArguments{
+			Left: &BlockHint{
+				Block: node.left.block,
+				Hint:  node.left.hint,
+			},
+			Right: &BlockHint{
+				Block: node.right.block,
+				Hint:  node.right.hint,
+			},
+		})
+	}
+
+	s.rehashUpNext(node.parent, transaction)
+}
+
+func (s *Store) rehashUp(node *Node) (result []TransactionArguments) {
+	s.rehashUpNext(node, &result)
+	return
 }
 
 func (s *Store) insertNode(node *Node, key string, value string) (modified *Node, transaction []TransactionArguments) {
@@ -79,7 +137,7 @@ func (s *Store) insertNode(node *Node, key string, value string) (modified *Node
 
 		// Can either keep track of the path taken or use the parent field to traverse the tree and build the transaction
 		// Here, the simplest solution is to reuse the rehashUp()
-		return node.right, s.rehashUp(node)
+		return node.right, s.rehashUp(node.right)
 	} else {
 		// Node already contains left and right nodes, select the one that has the smallest size or the left one by default
 		if node.left.size > node.right.size {
@@ -104,7 +162,9 @@ func (s *Store) Write(key string, value string) {
 
 	} else {
 		// Insert the value into the least-filled branch of the tree
-		existingValue.node, _ = s.insertAtRoot(key, value)
+		var transaction []TransactionArguments
+		existingValue.node, transaction = s.insertAtRoot(key, value)
+		fmt.Println(transaction)
 	}
 
 	existingValue.value = value
