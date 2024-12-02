@@ -66,9 +66,13 @@ func (s *Store) restoreTree(node *Node, block int, hint int) (err error) {
 		json.Unmarshal([]byte(trx.Data), &transaction)
 		if transaction.Hint == hint {
 			found = true
+			node.block = block
+			node.hint = hint
 
 			if transaction.Left != nil {
 				// Right should always exist if there is Left, for simplicity won't check it
+				node.left = &Node{parent: node}
+				node.right = &Node{parent: node}
 				err = s.restoreTree(node.left, transaction.Left.Block, transaction.Left.Hint)
 				if err != nil {
 					return err
@@ -82,9 +86,13 @@ func (s *Store) restoreTree(node *Node, block int, hint int) (err error) {
 				// Make a data copy instead of reference
 				node.data = &KeyValue{Key: transaction.Data.Key, Value: transaction.Data.Value}
 				s.db[transaction.Data.Key] = NodeValuePair{node: node, value: transaction.Data.Value}
+				// Will calculate redundant hashes, can be optimized by post-order traversing the tree
+				s.rehashUp(node)
 			}
 		}
 	}
+
+	// TODO: Recalculate the sizes
 
 	if !found {
 		return errors.New("not found")
@@ -98,16 +106,16 @@ func MakeStore(chain *chain.Chain) (result Store, err error) {
 	result.root = &Node{}
 
 	// Rebuild the state based on the chain data
-	blockString, err := chain.GetTableData("block")
-	if err != nil {
+	blockString, tempErr := chain.GetTableData("block")
+	if tempErr != nil {
 		return
 	}
 	block, err := strconv.Atoi(blockString)
 	if err != nil {
 		return
 	}
-	hintString, err := chain.GetTableData("hint")
-	if err != nil {
+	hintString, tempErr := chain.GetTableData("hint")
+	if tempErr != nil {
 		return
 	}
 	hint, err := strconv.Atoi(hintString)

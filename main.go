@@ -30,5 +30,5 @@ func main() {
 		fmt.Println(err.Error())
 		return
 	}
-	fmt.Println(s2.Get("hello"))
+	fmt.Println(s2.Get("x"))
 }
