@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"wayback-store/chain"
@@ -55,14 +56,69 @@ type Store struct {
 	nextHint int
 }
 
-func MakeStore(chain *chain.Chain) (result Store) {
+func (s *Store) restoreTree(node *Node, block int, hint int) (err error) {
+	// Can be optimized by caching blocks instead of fetching them each time
+	var blockData = s.chain.GetBlock(block)
+	// Find the matching hint
+	var found bool = false
+	for _, trx := range blockData.Transactions {
+		var transaction TransactionArguments
+		json.Unmarshal([]byte(trx.Data), &transaction)
+		if transaction.Hint == hint {
+			found = true
+
+			if transaction.Left != nil {
+				// Right should always exist if there is Left, for simplicity won't check it
+				err = s.restoreTree(node.left, transaction.Left.Block, transaction.Left.Hint)
+				if err != nil {
+					return err
+				}
+				err = s.restoreTree(node.right, transaction.Right.Block, transaction.Right.Hint)
+				if err != nil {
+					return err
+				}
+			} else {
+				// In all other cases there should be Data
+				// Make a data copy instead of reference
+				node.data = &KeyValue{Key: transaction.Data.Key, Value: transaction.Data.Value}
+				s.db[transaction.Data.Key] = NodeValuePair{node: node, value: transaction.Data.Value}
+			}
+		}
+	}
+
+	if !found {
+		return errors.New("not found")
+	}
+	return
+}
+
+func MakeStore(chain *chain.Chain) (result Store, err error) {
 	result.chain = chain
 	result.db = make(map[string]NodeValuePair)
 	result.root = &Node{}
 
 	// Rebuild the state based on the chain data
+	blockString, err := chain.GetTableData("block")
+	if err != nil {
+		return
+	}
+	block, err := strconv.Atoi(blockString)
+	if err != nil {
+		return
+	}
+	hintString, err := chain.GetTableData("hint")
+	if err != nil {
+		return
+	}
+	hint, err := strconv.Atoi(hintString)
+	if err != nil {
+		return
+	}
 
-	return result
+	result.nextHint = hint + 1
+	err = result.restoreTree(result.root, block, hint)
+
+	return
 }
 
 func hash(data string) (result string) {

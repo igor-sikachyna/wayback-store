@@ -8,7 +8,11 @@ import (
 
 func main() {
 	var c = chain.Chain{}
-	var s = store.MakeStore(&c)
+	var s, err = store.MakeStore(&c)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 
 	s.Write("a", "hello")
 	s.Write("b", "world")
@@ -21,6 +25,10 @@ func main() {
 	fmt.Println(s.Get("a"))
 
 	c.ProduceBlock()
-	var s2 = store.MakeStore(&c)
+	s2, err := store.MakeStore(&c)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 	fmt.Println(s2.Get("hello"))
 }

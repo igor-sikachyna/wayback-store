@@ -1,5 +1,7 @@
 package chain
 
+import "errors"
+
 type DatabaseOperation struct {
 	Key    string
 	Value  string
@@ -59,4 +61,12 @@ func (c *Chain) PushTransaction(trx PushTransactionData) {
 		}
 	}
 	c.buildingBlock = append(c.buildingBlock, Transaction{Data: trx.Data})
+}
+
+func (c *Chain) GetTableData(key string) (string, error) {
+	value, ok := c.data[key]
+	if ok {
+		return value, nil
+	}
+	return "", errors.New("not found")
 }
