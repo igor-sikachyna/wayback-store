@@ -3,7 +3,9 @@ package store
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"wayback-store/chain"
 )
 
@@ -24,13 +26,10 @@ type KeyValue struct {
 }
 
 type TransactionArguments struct {
+	Hint  int
 	Left  *BlockHint
 	Right *BlockHint
 	Data  *KeyValue
-}
-
-func (t TransactionArguments) GetHash() string {
-	return "abc"
 }
 
 type Node struct {
@@ -77,6 +76,13 @@ func (s *Store) getNextHint() int {
 	return s.nextHint
 }
 
+func prependTransaction(trx []TransactionArguments, action TransactionArguments) []TransactionArguments {
+	trx = append(trx, TransactionArguments{})
+	copy(trx[1:], trx)
+	trx[0] = action
+	return trx
+}
+
 func (s *Store) rehashUpNext(node *Node, transaction *[]TransactionArguments) {
 	if node == nil {
 		return
@@ -97,11 +103,13 @@ func (s *Store) rehashUpNext(node *Node, transaction *[]TransactionArguments) {
 	node.hint = s.getNextHint()
 
 	if node.data != nil {
-		*transaction = append(*transaction, TransactionArguments{
+		*transaction = prependTransaction(*transaction, TransactionArguments{
+			Hint: node.hint,
 			Data: node.data,
 		})
 	} else {
-		*transaction = append(*transaction, TransactionArguments{
+		*transaction = prependTransaction(*transaction, TransactionArguments{
+			Hint: node.hint,
 			Left: &BlockHint{
 				Block: node.left.block,
 				Hint:  node.left.hint,
@@ -131,7 +139,7 @@ func (s *Store) insertNode(node *Node, key string, value string) (modified *Node
 		return node, s.rehashUp(node)
 	} else if node.data != nil {
 		// Node contains some data, need to split it into 2 and write the new key-value into the right node
-		node.left = &Node{size: 1, parent: node, data: node.data}
+		node.left = &Node{size: 1, parent: node, data: node.data, block: node.block, hint: node.hint}
 		node.right = &Node{size: 1, parent: node, data: &KeyValue{Key: key, Value: value}}
 		node.data = nil
 
@@ -151,24 +159,64 @@ func (s *Store) insertAtRoot(key string, value string) (modified *Node, transact
 	return s.insertNode(s.root, key, value)
 }
 
+func (s *Store) formatHeadTransaction(transaction TransactionArguments) (result chain.PushTransactionData) {
+	data, err := json.Marshal(transaction)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	return chain.PushTransactionData{
+		Data: string(data),
+		DBOps: &[]chain.DatabaseOperation{{
+			Key:   "hint",
+			Value: strconv.Itoa(transaction.Hint),
+		}, {
+			Key:   "block",
+			Value: strconv.Itoa(s.chain.GetBuildingBlockNum()),
+		}},
+	}
+}
+
+func (s *Store) formatBodyTransaction(transaction TransactionArguments) (result chain.PushTransactionData) {
+	data, err := json.Marshal(transaction)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	return chain.PushTransactionData{
+		Data:  string(data),
+		DBOps: nil,
+	}
+}
+
 func (s *Store) Write(key string, value string) {
 	//s.chain.PushTransaction(chain.PushTransactionData{DBOp: {Scope: }})
 
 	var existingValue, exists = s.db[key]
+	var transaction []TransactionArguments
 	if exists {
 		// Need to find the existing node and modify it
 		// Can be optimized to hash the key into a number and have a secondary binary search tree or AVL tree
 		// For now just store the node pointer in the key-value table and keep track of the parent node of each node
-
+		existingValue.value = value
+		transaction = s.rehashUp(existingValue.node)
 	} else {
 		// Insert the value into the least-filled branch of the tree
-		var transaction []TransactionArguments
 		existingValue.node, transaction = s.insertAtRoot(key, value)
-		fmt.Println(transaction)
 	}
+	fmt.Println(transaction)
 
 	existingValue.value = value
 	s.db[key] = existingValue
+
+	// Push transaction
+	for i, trx := range transaction {
+		if i == 0 {
+			s.chain.PushTransaction(s.formatHeadTransaction(trx))
+		} else {
+			s.chain.PushTransaction(s.formatBodyTransaction(trx))
+		}
+	}
 }
 
 func (s *Store) Get(key string) string {

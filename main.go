@@ -12,9 +12,11 @@ func main() {
 
 	s.Write("a", "hello")
 	s.Write("b", "world")
+	c.ProduceBlock()
 	s.Write("c", "!")
 	s.Write("z", "abc")
 	s.Write("y", "def")
+	c.ProduceBlock()
 	s.Write("x", "ghi")
 	fmt.Println(s.Get("a"))
 

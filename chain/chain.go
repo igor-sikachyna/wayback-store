@@ -11,8 +11,8 @@ type Transaction struct {
 }
 
 type PushTransactionData struct {
-	Data string
-	DBOp *DatabaseOperation
+	Data  string
+	DBOps *[]DatabaseOperation
 }
 
 type Block struct {
@@ -44,12 +44,18 @@ func (c *Chain) ProduceBlock() {
 }
 
 func (c *Chain) PushTransaction(trx PushTransactionData) {
-	if trx.DBOp != nil {
-		var operation = (*trx.DBOp)
-		if operation.Delete {
-			delete(c.data, operation.Key)
-		} else {
-			c.data[operation.Key] = operation.Value
+	if c.data == nil {
+		c.data = make(map[string]string)
+	}
+
+	if trx.DBOps != nil {
+		var operations = (*trx.DBOps)
+		for _, operation := range operations {
+			if operation.Delete {
+				delete(c.data, operation.Key)
+			} else {
+				c.data[operation.Key] = operation.Value
+			}
 		}
 	}
 	c.buildingBlock = append(c.buildingBlock, Transaction{Data: trx.Data})
