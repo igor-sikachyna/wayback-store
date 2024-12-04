@@ -268,7 +268,6 @@ func (s *Store) Write(key string, value string) {
 		// Insert the value into the least-filled branch of the tree
 		existingValue.node, transaction = s.insertAtRoot(key, value)
 	}
-	fmt.Println(transaction)
 
 	existingValue.value = value
 	s.db[key] = existingValue

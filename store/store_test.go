@@ -24,6 +24,7 @@ func TestCreateStore(t *testing.T) {
 	assert.Equal("df4504ce92500fe8a20fb37090e36afa9053480c3e8dde4f4ae3fab4f5d8b1d7", s.root.hash, "incorrect root node hash")
 
 	assert.Equal("1", s.Get("a"), "incorrect table value returned")
+	assert.Equal("", s.Get("invalid"), "did not fail to get a non-existing value")
 }
 
 func TestStoreTree(t *testing.T) {
@@ -48,6 +49,13 @@ func TestStoreTree(t *testing.T) {
 	// a+1   c+3       b+2   d+4
 
 	assert.Equal(4, s.root.size, "incorrect root node size")
+	assert.Equal(2, s.root.left.size, "incorrect x node size")
+	assert.Equal(2, s.root.left.size, "incorrect y node size")
+	assert.Equal(1, s.root.left.left.size, "incorrect a node size")
+	assert.Equal(1, s.root.left.right.size, "incorrect c node size")
+	assert.Equal(1, s.root.right.left.size, "incorrect b node size")
+	assert.Equal(1, s.root.right.right.size, "incorrect d node size")
+
 	assert.Equal("a", s.root.left.left.data.Key, "incorrect node key 1")
 	assert.Equal("b", s.root.right.left.data.Key, "incorrect node key 2")
 	assert.Equal("c", s.root.left.right.data.Key, "incorrect node key 3")
