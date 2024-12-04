@@ -1,7 +1,7 @@
 package store
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -130,7 +130,7 @@ func MakeStore(chain *chain.Chain) (result Store, err error) {
 }
 
 func hash(data string) (result string) {
-	var hasher = sha1.New()
+	var hasher = sha256.New()
 	hasher.Write([]byte(data))
 	return hex.EncodeToString(hasher.Sum(nil))
 }
